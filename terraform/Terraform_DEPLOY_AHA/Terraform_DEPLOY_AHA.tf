@@ -8,20 +8,20 @@ data "aws_caller_identity" "current" {}
 provider "aws" {
     region  = var.aha_primary_region
     default_tags {
-      tags = "${var.default_tags}"
+      tags = var.default_tags
     }
 }
 
 # Secondary region - provider config
 locals {
-    secondary_region = "${var.aha_secondary_region == "" ? var.aha_primary_region : var.aha_secondary_region}"
+    secondary_region = var.aha_secondary_region == "" ? var.aha_primary_region : var.aha_secondary_region
 }
 
 provider "aws" {
     alias   = "secondary_region"
     region  = local.secondary_region
     default_tags {
-      tags = "${var.default_tags}"
+      tags = var.default_tags
     }
 }
 
@@ -30,19 +30,19 @@ locals {
     source_files = ["../../handler.py", "../../messagegenerator.py"]
 }
 data "template_file" "t_file" {
-    count = "${length(local.source_files)}"
-    template = "${file(element(local.source_files, count.index))}"
+    count = length(local.source_files)
+    template = file(element(local.source_files, count.index))
 }
 data "archive_file" "lambda_zip" {
     type          = "zip"
     output_path   = "lambda_function.zip"
     source {
-      filename = "${basename(local.source_files[0])}"
-      content  = "${data.template_file.t_file.0.rendered}"
+      filename = basename(local.source_files[0])
+      content  = data.template_file.t_file[0].rendered
     }
     source {
-      filename = "${basename(local.source_files[1])}"
-      content  = "${data.template_file.t_file.1.rendered}"
+      filename = basename(local.source_files[1])
+      content  = data.template_file.t_file[1].rendered
   }
 }
 
@@ -196,7 +196,7 @@ resource "random_string" "resource_code" {
 
 # S3 buckets creation
 resource "aws_s3_bucket" "AHA-S3Bucket-PrimaryRegion" {
-    count      = "${var.ExcludeAccountIDs != "" ? 1 : 0}"
+    count      = var.ExcludeAccountIDs != "" ? 1 : 0
     bucket     = "aha-bucket-${var.aha_primary_region}-${random_string.resource_code.result}"
     tags = {
       Name        = "aha-bucket"
@@ -210,7 +210,7 @@ resource "aws_s3_bucket_acl" "AHA-S3Bucket-PrimaryRegion" {
 }
 
 resource "aws_s3_bucket" "AHA-S3Bucket-SecondaryRegion" {
-    count      = "${var.aha_secondary_region != "" && var.ExcludeAccountIDs != "" ? 1 : 0}"
+    count      = var.aha_secondary_region != "" && var.ExcludeAccountIDs != "" ? 1 : 0
     provider   = aws.secondary_region
     bucket     = "aha-bucket-${var.aha_secondary_region}-${random_string.resource_code.result}"
     tags = {
@@ -219,36 +219,36 @@ resource "aws_s3_bucket" "AHA-S3Bucket-SecondaryRegion" {
 }
 
 resource "aws_s3_bucket_acl" "AHA-S3Bucket-SecondaryRegion" {
-    count  = "${var.aha_secondary_region != "" && var.ExcludeAccountIDs != "" ? 1 : 0}"
+    count  = var.aha_secondary_region != "" && var.ExcludeAccountIDs != "" ? 1 : 0
     provider   = aws.secondary_region
     bucket = aws_s3_bucket.AHA-S3Bucket-SecondaryRegion[0].id
     acl    = "private"
 }
 
 resource "aws_s3_object" "AHA-S3Object-PrimaryRegion" {
-    count      = "${var.ExcludeAccountIDs != "" ? 1 : 0}"
+    count      = var.ExcludeAccountIDs != "" ? 1 : 0
     key        = var.ExcludeAccountIDs
     bucket     = aws_s3_bucket.AHA-S3Bucket-PrimaryRegion[0].bucket
     source     = var.ExcludeAccountIDs
     tags = {
-      Name        = "${var.ExcludeAccountIDs}"
+      Name        = var.ExcludeAccountIDs
     }
 }
 
 resource "aws_s3_object" "AHA-S3Object-SecondaryRegion" {
-    count      = "${var.aha_secondary_region != "" && var.ExcludeAccountIDs != "" ? 1 : 0}"
+    count      = var.aha_secondary_region != "" && var.ExcludeAccountIDs != "" ? 1 : 0
     provider   = aws.secondary_region
     key        = var.ExcludeAccountIDs
     bucket     = aws_s3_bucket.AHA-S3Bucket-SecondaryRegion[0].bucket
     source     = var.ExcludeAccountIDs
     tags = {
-      Name        = "${var.ExcludeAccountIDs}"
+      Name        = var.ExcludeAccountIDs
     }
 }
 
 # DynamoDB table - Create if secondary region not set
 resource "aws_dynamodb_table" "AHA-DynamoDBTable" {
-    count = "${var.aha_secondary_region == "" ? 1 : 0}"
+    count = var.aha_secondary_region == "" ? 1 : 0
     billing_mode   = "PROVISIONED"
     hash_key       = "arn"
     name           = "${var.dynamodbtable}-${random_string.resource_code.result}"
@@ -256,7 +256,7 @@ resource "aws_dynamodb_table" "AHA-DynamoDBTable" {
     write_capacity = 5
     stream_enabled = false
     tags           = {
-       Name   = "${var.dynamodbtable}"
+       Name   = var.dynamodbtable
     }
 
     attribute {
@@ -278,14 +278,14 @@ resource "aws_dynamodb_table" "AHA-DynamoDBTable" {
 
 # DynamoDB table - Multi region Global Table - Create if secondary region is set
 resource "aws_dynamodb_table" "AHA-GlobalDynamoDBTable" {
-    count = "${var.aha_secondary_region == "" ? 0 : 1}"
+    count = var.aha_secondary_region == "" ? 0 : 1
     billing_mode     = "PAY_PER_REQUEST"
     hash_key         = "arn"
     name             = "${var.dynamodbtable}-${random_string.resource_code.result}"
     stream_enabled   = true
     stream_view_type = "NEW_AND_OLD_IMAGES"
     tags           = {
-       Name   = "${var.dynamodbtable}"
+       Name   = var.dynamodbtable
     }
 
     attribute {
@@ -310,11 +310,11 @@ resource "aws_dynamodb_table" "AHA-GlobalDynamoDBTable" {
 }
 # Tags for DynamoDB - secondary region
 resource "aws_dynamodb_tag" "AHA-GlobalDynamoDBTable" {
-    count = "${var.aha_secondary_region == "" ? 0 : 1}"
+    count = var.aha_secondary_region == "" ? 0 : 1
     provider   = aws.secondary_region
     resource_arn = replace(aws_dynamodb_table.AHA-GlobalDynamoDBTable[count.index].arn, var.aha_primary_region, var.aha_secondary_region)
     key          = "Name"
-    value        = "${var.dynamodbtable}"
+    value        = var.dynamodbtable
 }
 # Tags for DynamoDB - secondary region - default_tags
 resource "aws_dynamodb_tag" "AHA-GlobalDynamoDBTable-Additional-tags" {
@@ -327,7 +327,7 @@ resource "aws_dynamodb_tag" "AHA-GlobalDynamoDBTable-Additional-tags" {
 
 # Secrets - SlackChannelSecret
 resource "aws_secretsmanager_secret" "SlackChannelID" {
-    count = "${var.SlackWebhookURL == "" ? 0 : 1}"
+    count = var.SlackWebhookURL == "" ? 0 : 1
     name             = "SlackChannelID"
     description      = "Slack Channel ID Secret"
     recovery_window_in_days      = 0
@@ -342,14 +342,14 @@ resource "aws_secretsmanager_secret" "SlackChannelID" {
     }
 }
 resource "aws_secretsmanager_secret_version" "SlackChannelID" {
-    count = "${var.SlackWebhookURL == "" ? 0 : 1}"
-    secret_id     = "${aws_secretsmanager_secret.SlackChannelID.*.id[count.index]}"
-    secret_string = "${var.SlackWebhookURL}"
+    count = var.SlackWebhookURL == "" ? 0 : 1
+    secret_id     = aws_secretsmanager_secret.SlackChannelID.*.id[count.index]
+    secret_string = var.SlackWebhookURL
 }
 
 # Secrets - MicrosoftChannelSecret
 resource "aws_secretsmanager_secret" "MicrosoftChannelID" {
-    count = "${var.MicrosoftTeamsWebhookURL == "" ? 0 : 1}"
+    count = var.MicrosoftTeamsWebhookURL == "" ? 0 : 1
     name             = "MicrosoftChannelID"
     description      = "Microsoft Channel ID Secret"
     recovery_window_in_days      = 0
@@ -365,14 +365,14 @@ resource "aws_secretsmanager_secret" "MicrosoftChannelID" {
     }
 }
 resource "aws_secretsmanager_secret_version" "MicrosoftChannelID" {
-    count = "${var.MicrosoftTeamsWebhookURL == "" ? 0 : 1}"
-    secret_id     = "${aws_secretsmanager_secret.MicrosoftChannelID.*.id[count.index]}"
-    secret_string = "${var.MicrosoftTeamsWebhookURL}"
+    count = var.MicrosoftTeamsWebhookURL == "" ? 0 : 1
+    secret_id     = aws_secretsmanager_secret.MicrosoftChannelID.*.id[count.index]
+    secret_string = var.MicrosoftTeamsWebhookURL
 }
 
 # Secrets - EventBusNameSecret
 resource "aws_secretsmanager_secret" "EventBusName" {
-    count = "${var.EventBusName == "" ? 0 : 1}"
+    count = var.EventBusName == "" ? 0 : 1
     name             = "EventBusName"
     description      = "EventBus Name Secret"
     recovery_window_in_days      = 0
@@ -389,14 +389,14 @@ resource "aws_secretsmanager_secret" "EventBusName" {
 }
 
 resource "aws_secretsmanager_secret_version" "EventBusName" {
-    count = "${var.EventBusName == "" ? 0 : 1}"
-    secret_id     = "${aws_secretsmanager_secret.EventBusName.*.id[count.index]}"
-    secret_string = "${var.EventBusName}"
+    count = var.EventBusName == "" ? 0 : 1
+    secret_id     = aws_secretsmanager_secret.EventBusName.*.id[count.index]
+    secret_string = var.EventBusName
 }
 
 # Secrets - ChimeChannelSecret
 resource "aws_secretsmanager_secret" "ChimeChannelID" {
-    count = "${var.AmazonChimeWebhookURL == "" ? 0 : 1}"
+    count = var.AmazonChimeWebhookURL == "" ? 0 : 1
     name             = "ChimeChannelID"
     description      = "Chime Channel ID Secret"
     recovery_window_in_days      = 0
@@ -412,14 +412,14 @@ resource "aws_secretsmanager_secret" "ChimeChannelID" {
     }
 }
 resource "aws_secretsmanager_secret_version" "ChimeChannelID" {
-    count = "${var.AmazonChimeWebhookURL == "" ? 0 : 1}"
-    secret_id     = "${aws_secretsmanager_secret.ChimeChannelID.*.id[count.index]}"
-    secret_string = "${var.AmazonChimeWebhookURL}"
+    count = var.AmazonChimeWebhookURL == "" ? 0 : 1
+    secret_id     = aws_secretsmanager_secret.ChimeChannelID.*.id[count.index]
+    secret_string = var.AmazonChimeWebhookURL
 }
 
 # Secrets - AssumeRoleSecret
 resource "aws_secretsmanager_secret" "AssumeRoleArn" {
-    count = "${var.ManagementAccountRoleArn == "" ? 0 : 1}"
+    count = var.ManagementAccountRoleArn == "" ? 0 : 1
     name             = "AssumeRoleArn"
     description      = "Management account role for AHA to assume"
     recovery_window_in_days      = 0
@@ -435,9 +435,9 @@ resource "aws_secretsmanager_secret" "AssumeRoleArn" {
     }
 }
 resource "aws_secretsmanager_secret_version" "AssumeRoleArn" {
-    count = "${var.ManagementAccountRoleArn == "" ? 0 : 1}"
-    secret_id     = "${aws_secretsmanager_secret.AssumeRoleArn.*.id[count.index]}"
-    secret_string = "${var.ManagementAccountRoleArn}"
+    count = var.ManagementAccountRoleArn == "" ? 0 : 1
+    secret_id     = aws_secretsmanager_secret.AssumeRoleArn.*.id[count.index]
+    secret_string = var.ManagementAccountRoleArn
 }
 
 # IAM Role for Lambda function execution
@@ -638,7 +638,7 @@ data "aws_iam_policy_document" "AHA-LambdaPolicy-Document" {
           "sts:AssumeRole",
       ]
       resources = [
-          "${var.ManagementAccountRoleArn}",
+          var.ManagementAccountRoleArn,
       ]
     }
   }
@@ -703,7 +703,7 @@ resource "aws_lambda_function" "AHA-LambdaFunction-PrimaryRegion" {
 
 # aws_lambda_function - AHA-LambdaFunction - Secondary region
 resource "aws_lambda_function" "AHA-LambdaFunction-SecondaryRegion" {
-    count                          = "${var.aha_secondary_region == "" ? 0 : 1}"
+    count                          = var.aha_secondary_region == "" ? 0 : 1
     provider                       = aws.secondary_region
     description                    = "Lambda function that runs AHA"
     function_name                  = "AHA-LambdaFunction-${random_string.resource_code.result}"
@@ -760,7 +760,7 @@ resource "aws_cloudwatch_event_rule" "AHA-LambdaSchedule-PrimaryRegion" {
     }
 }
 resource "aws_cloudwatch_event_rule" "AHA-LambdaSchedule-SecondaryRegion" {
-    count               = "${var.aha_secondary_region == "" ? 0 : 1}"
+    count               = var.aha_secondary_region == "" ? 0 : 1
     provider            = aws.secondary_region    
     description         = "Lambda trigger Event"
     event_bus_name      = "default"
@@ -777,7 +777,7 @@ resource "aws_cloudwatch_event_target" "AHA-LambdaFunction-PrimaryRegion" {
     rule           = aws_cloudwatch_event_rule.AHA-LambdaSchedule-PrimaryRegion.name
 }
 resource "aws_cloudwatch_event_target" "AHA-LambdaFunction-SecondaryRegion" {
-    count          = "${var.aha_secondary_region == "" ? 0 : 1}"
+    count          = var.aha_secondary_region == "" ? 0 : 1
     provider       = aws.secondary_region    
     arn            = aws_lambda_function.AHA-LambdaFunction-SecondaryRegion[0].arn
     rule           = aws_cloudwatch_event_rule.AHA-LambdaSchedule-SecondaryRegion[0].name
@@ -790,7 +790,7 @@ resource "aws_lambda_permission" "AHA-LambdaSchedulePermission-PrimaryRegion" {
     source_arn    = aws_cloudwatch_event_rule.AHA-LambdaSchedule-PrimaryRegion.arn
 }
 resource "aws_lambda_permission" "AHA-LambdaSchedulePermission-SecondaryRegion" {
-    count         = "${var.aha_secondary_region == "" ? 0 : 1}"
+    count         = var.aha_secondary_region == "" ? 0 : 1
     provider      = aws.secondary_region    
     action        = "lambda:InvokeFunction"
     principal     = "events.amazonaws.com"
